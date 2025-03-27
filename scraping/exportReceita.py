@@ -1,10 +1,10 @@
-#SCRAPER ABIC/EXPORTAÇÕES POR VOLUME
+#SCRAPER ABIC/EXPORTAÇÕES POR RECEITA
 
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-url = "https://estatisticas.abic.com.br/estatisticas/exportacoes-brasileiras-de-cafe-volume/"
+url = "https://estatisticas.abic.com.br/estatisticas/exportacoes-brasileiras-de-cafe-receita/"
 
 payload = {}
 headers = {
@@ -71,8 +71,7 @@ if response.status_code == 200:
         print("\nDataFrame criado com sucesso: ")
         print(df)
         
-        #salvar em csv
-        # df.to_csv('exportacoes_cafe.csv', index=False, encoding='utf-8')
+        
     except Exception as e:
         print(f"Erro ao criar DataFrame: {e}")
         print("Dados brutos:", data) #debug

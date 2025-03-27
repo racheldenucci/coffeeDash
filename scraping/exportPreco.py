@@ -1,10 +1,10 @@
-#SCRAPER ABIC/EXPORTAÇÕES POR VOLUME
+#SCRAPER ABIC/EXPORTAÇÕES POR PREÇO MÉDIO
 
 import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-url = "https://estatisticas.abic.com.br/estatisticas/exportacoes-brasileiras-de-cafe-volume/"
+url = "https://estatisticas.abic.com.br/estatisticas/exportacoes-brasileiras-de-cafe-preco-medio/"
 
 payload = {}
 headers = {
