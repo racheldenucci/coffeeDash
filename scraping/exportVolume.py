@@ -39,12 +39,12 @@ def get_export_volume():
         print("Erro: Nenhuma tabela encontrada.")
         return pd.DataFrame()
 
-    # Extrai os cabeçalhos
+    #extrai cabeçalhos
     headers = [header.text.strip() for header in table.find_all('th')]
     if not headers:
         print("Nenhum cabeçalho encontrado. Usando cabeçalhos genéricos.")
 
-    # Extrai os dados
+    #extrai dados
     data = []
     for row in table.find_all('tr')[1:]:
         cols = [col.text.strip() for col in row.find_all('td')]
@@ -59,7 +59,6 @@ def get_export_volume():
     if not headers or len(headers) != len(data[0]):
         headers = [f"Coluna_{i+1}" for i in range(len(data[0]))]
 
-    # Cria o DataFrame
     try:
         df = pd.DataFrame(data, columns=headers)
         df['Fonte'] = 'ABIC - Exportações por Volume'
