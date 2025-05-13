@@ -8,4 +8,5 @@ def update_data():
     export_preco = get_export_preco()
     export_receita = get_export_receita()
 
+
     
