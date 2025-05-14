@@ -1,6 +1,11 @@
 import psycopg2
+import os
+from dotenv import load_dotenv
 
-DB_URL = 'postgres://ua2s8fta7iiqu:pe16a9baec7a8e7104e3d3e1c99a56bfc3625f91a944eeac0e3b7d3eee5c1090e@c6sfjnr30ch74e.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/df6vcs0bs7fbr'
+
+load_dotenv()
+
+DB_URL = os.getenv("DB_URL")
 
 def create_tables(cur):
     cur.execute("""
