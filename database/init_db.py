@@ -96,10 +96,10 @@ def main():
         create_tables(cur)
 
         conn.commit()
-        print("Tabelas criadas e dados auxiliares inseridos com sucesso.")
+        print("Tabelas criadas com sucesso")
     
     except Exception as e:
-        print("Erro:", e)
+        print(f"Erro: {e}")
         conn.rollback()
     
     finally:
