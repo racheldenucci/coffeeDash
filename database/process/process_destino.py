@@ -10,7 +10,7 @@ import re
 load_dotenv()
 
 def is_valid_string(s):
-    # Aceita strings com letras, números, espaços e alguns caracteres especiais comuns
+    # Aceita strings com letras, números, espaços, hífens e alguns caracteres especiais comuns
     return bool(s and not s.isdigit() and re.match(r'^[a-zA-Z0-9\s\-\&\(\)\.,\'\u00C0-\u00FF]+$', s))
 
 def processar_paises(cursor):
@@ -30,11 +30,13 @@ def processar_paises(cursor):
                                 start_data = True
                                 continue
                             if start_data and line.strip():
-                                columns = [col.strip() for col in line.split() if col.strip()]  # Usar espaço como delimitador
-                                if columns and len(columns) > 1 and is_valid_string(columns[0]):
-                                    pais = columns[0].strip()
-                                    paises.add(pais)
-                                    print(f"Pais detectado: {pais}")
+                                # Tentar capturar o país completo antes de dividir
+                                first_word = line.strip().split()[0] if line.strip().split() else ""
+                                if is_valid_string(first_word):
+                                    pais = " ".join(line.strip().split()[:1])  # Pegar apenas a primeira palavra como país
+                                    if pais not in ["TOTAL"]:  # Ignorar "TOTAL" como país
+                                        paises.add(pais)
+                                        print(f"Pais detectado: {pais}")
         except Exception as e:
             print(f"Erro ao processar {pdf_path}: {e.__class__.__name__}: {str(e)}")
             continue
@@ -58,36 +60,41 @@ def processar_pdf_exportacao(pdf_path, ano, cursor):
                     print(f"Texto extraído de {pdf_path} para exportação: {text[:200]}...")
                     lines = text.split('\n')
                     start_data = False
+                    month_line_idx = -1
                     for i, line in enumerate(lines):
                         if "Exportação entre" in line:
                             start_data = True
-                            # Próxima linha contém os meses
-                            month_line = lines[i + 1].strip().split()
-                            months = [m for m in month_line if m and not m.isdigit()]  # Capturar meses (ex.: "01/2024")
                             continue
-                        if start_data and line.strip() and i > i + 1:  # Dados começam após os meses
+                        if start_data and "01/" in line:  # Linha de meses
+                            month_line_idx = i
+                            month_line = [m.strip() for m in line.split() if m.strip() and "20" in m]  # Capturar meses com ano
+                            print(f"Meses detectados: {month_line}")
+                            continue
+                        if start_data and line.strip() and i > month_line_idx and month_line:  # Dados após os meses
                             columns = [col.strip() for col in line.split() if col.strip()]
                             if columns and len(columns) > 1 and is_valid_string(columns[0]):
                                 pais = columns[0].strip()
-                                meses = columns[1:]  # Volumes a partir da segunda coluna
-                                for mes_idx, volume in enumerate(meses, 1):
-                                    volume = volume.replace(',', '').replace('.', '').strip() if volume else '0'
-                                    if volume and volume != '0':
-                                        try:
-                                            volume = float(volume)
-                                            cursor.execute("SELECT idPais FROM pais WHERE descricao = %s;", (pais,))
-                                            id_pais = cursor.fetchone()
-                                            if id_pais:
-                                                id_pais = id_pais[0]
-                                                data.append({
-                                                    "ano": ano,
-                                                    "mes": mes_idx,
-                                                    "idPais": id_pais,
-                                                    "volume": volume
-                                                })
-                                                print(f"Processando {ano}-{mes_idx:02d}, {pais}, volume {volume}, idPais {id_pais}")
-                                        except ValueError:
-                                            print(f"Valor inválido ignorado: {pais}, mês {mes_idx}, volume {volume}")
+                                volumes = columns[1:]  # Volumes a partir da segunda coluna
+                                if pais not in ["TOTAL"]:  # Ignorar linhas com "TOTAL"
+                                    for mes_idx, volume in enumerate(volumes, 1):
+                                        if mes_idx <= len(month_line):  # Garantir que não exceda os meses
+                                            volume = volume.replace(',', '').replace('.', '').strip() if volume else '0'
+                                            if volume and volume != '0':
+                                                try:
+                                                    volume = float(volume)
+                                                    cursor.execute("SELECT idPais FROM pais WHERE descricao = %s;", (pais,))
+                                                    id_pais = cursor.fetchone()
+                                                    if id_pais:
+                                                        id_pais = id_pais[0]
+                                                        data.append({
+                                                            "ano": ano,
+                                                            "mes": mes_idx,
+                                                            "idPais": id_pais,
+                                                            "volume": volume
+                                                        })
+                                                        print(f"Processando {ano}-{mes_idx:02d}, {pais}, volume {volume}, idPais {id_pais}")
+                                                except ValueError:
+                                                    print(f"Valor inválido ignorado: {pais}, mês {mes_idx}, volume {volume}")
     except Exception as e:
         print(f"Erro ao processar {pdf_path}: {e.__class__.__name__}: {str(e)}")
     print(f"Total de linhas processadas para {ano}: {len(data)}")
