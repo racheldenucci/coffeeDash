@@ -14,6 +14,14 @@ def is_valid_string(s):
     return bool(s and not s.isdigit() and re.match(r'^[a-zA-Z0-9\s\-\&\(\)\.,\'\u00C0-\u00FF]+$', s))
 
 def processar_paises(cursor):
+    # Limpar a tabela Pais antes de inserir novos dados
+    try:
+        cursor.execute("TRUNCATE TABLE pais RESTART IDENTITY CASCADE;")
+        print("Tabela 'pais' limpa com sucesso.")
+    except Error as e:
+        print(f"Erro ao limpar tabela 'pais': {e.__class__.__name__}: {str(e)}")
+        return
+
     # Inserir países a partir dos PDFs
     paises = set()
     for pdf_path in ["data/destino2024.pdf", "data/destino2025.pdf"]:
@@ -30,11 +38,17 @@ def processar_paises(cursor):
                                 start_data = True
                                 continue
                             if start_data and line.strip():
-                                # Tentar capturar o país completo antes de dividir
-                                first_word = line.strip().split()[0] if line.strip().split() else ""
-                                if is_valid_string(first_word):
-                                    pais = " ".join(line.strip().split()[:1])  # Pegar apenas a primeira palavra como país
-                                    if pais not in ["TOTAL"]:  # Ignorar "TOTAL" como país
+                                # Capturar o país completo até o primeiro valor numérico
+                                columns = line.strip().split()
+                                if columns:
+                                    pais = ""
+                                    for col in columns:
+                                        if not re.match(r'^\d+', col):  # Parar antes de valores numéricos
+                                            pais += col + " "
+                                        else:
+                                            break
+                                    pais = pais.strip()
+                                    if pais and pais not in ["TOTAL"]:  # Ignorar "TOTAL" como país
                                         paises.add(pais)
                                         print(f"Pais detectado: {pais}")
         except Exception as e:
@@ -71,11 +85,19 @@ def processar_pdf_exportacao(pdf_path, ano, cursor):
                             print(f"Meses detectados: {month_line}")
                             continue
                         if start_data and line.strip() and i > month_line_idx and month_line:  # Dados após os meses
-                            columns = [col.strip() for col in line.split() if col.strip()]
-                            if columns and len(columns) > 1 and is_valid_string(columns[0]):
-                                pais = columns[0].strip()
-                                volumes = columns[1:]  # Volumes a partir da segunda coluna
-                                if pais not in ["TOTAL"]:  # Ignorar linhas com "TOTAL"
+                            columns = line.strip().split()
+                            if columns and len(columns) > 1:
+                                # Capturar o país completo até o primeiro valor numérico
+                                pais = ""
+                                volumes = []
+                                for col in columns:
+                                    if not re.match(r'^\d+', col):  # Acumular no país
+                                        pais += col + " "
+                                    else:  # Começar a coletar volumes
+                                        volumes = columns[columns.index(col):]
+                                        break
+                                pais = pais.strip()
+                                if pais and pais not in ["TOTAL"] and is_valid_string(pais):
                                     for mes_idx, volume in enumerate(volumes, 1):
                                         if mes_idx <= len(month_line):  # Garantir que não exceda os meses
                                             volume = volume.replace(',', '').replace('.', '').strip() if volume else '0'
