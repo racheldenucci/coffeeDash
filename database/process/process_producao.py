@@ -22,6 +22,12 @@ def processar_producao():
         "AM": 1, "RO": 2, "PA": 3, "BA": 4, "MT": 5, "GO": 6, "MG": 7, "ES": 8,
         "RJ": 9, "SP": 10, "PR": 11, "OUTROS": 12
     }
+    # Mapeamento de regiões com base nos dados inseridos na tabela Regiao
+    regiao_map = {
+        "Cerrado": 1, "Planalto": 2, "Atlântico": 3,
+        "Sul e Centro-Oeste": 4, "Triângulo, Alto Paranaíba e Noroeste": 5,
+        "Zona da Mata, Rio Doce e Central": 6, "Norte, Jequitinhona e Mucuri": 7
+    }
 
     for index, row in df_area.iterrows():
         estado_col = "Estados e Regiões"
@@ -46,8 +52,8 @@ def processar_producao():
         id_estado = estado_map.get(estado, None)
         if id_estado is None:
             continue
-        id_regiao = None  # Pode ser ajustado depois
-        id_especie = 1 if especie_desc == "Arábica" else 2 if especie_desc == "Robusta" else None
+        id_regiao = regiao_map.get(regiao_desc, None) if regiao_desc and regiao_desc in regiao_map else None
+        id_especie = 1 if especie_desc == "Arábica" else 2 if especie_desc == "Robusta" else 3 if especie_desc == "Conillon" else None
         id_tipo = 1
 
         if id_especie and id_estado:
@@ -55,10 +61,19 @@ def processar_producao():
                 area = row[ano] if pd.notna(row[ano]) and ano in df_area.columns else None
                 # Obter o volume correspondente da outra planilha
                 volume_row = df_volume.iloc[index]
-                volume = volume_row[ano] if pd.notna(volume_row[ano]) and ano in df_volume.columns else None
+                volume = volume_row[ano] if pd.notna(row[ano]) and ano in df_volume.columns else None
                 if area is not None or volume is not None:
-                    data.append({"ano": ano, "idEstado": id_estado, "idRegiao": id_regiao, "idTipo": id_tipo, "idEspecie": id_especie, "area": float(area) if area is not None else None, "volume": float(volume) if volume is not None else None})
-                    print(f"Processando linha {index}, estado {estado}, ano {ano}, area {area}, volume {volume}, especie {especie_desc}")
+                    # Converter diretamente para tipos nativos do Python
+                    data.append({
+                        "ano": int(ano) if ano is not None else None,
+                        "idEstado": int(id_estado),
+                        "idRegiao": int(id_regiao) if id_regiao is not None else None,
+                        "idTipo": int(id_tipo),
+                        "idEspecie": int(id_especie),
+                        "area": float(area) if area is not None else None,
+                        "volume": float(volume) if volume is not None else None
+                    })
+                    print(f"Processando linha {index}, estado {estado}, região {regiao_desc}, ano {ano}, area {area}, volume {volume}, especie {especie_desc}")
 
     print(f"Total de linhas processadas: {len(data)}")
     return pd.DataFrame(data)
@@ -79,17 +94,28 @@ def inserir_no_banco(df, table_name, columns, create_table_query):
         if not table_exists:
             print(f"Tabela {table_name_lower} não existe, criando...")
             cursor.execute(create_table_query.replace(table_name, table_name_lower))
+            conn.commit()  # Commit a criação da tabela
         else:
             print(f"Tabela {table_name_lower} já existe, truncando dados...")
             cursor.execute(f"TRUNCATE TABLE {table_name_lower} RESTART IDENTITY CASCADE;")
+            conn.commit()  # Commit o truncate
 
-        for col in ['ano', 'area', 'volume']:
-            if col in df.columns:
-                df[col] = df[col].fillna(0).astype(float).apply(float)
+        # Garantir que os valores sejam passados como tipos nativos do Python
         insert_query = f"INSERT INTO {table_name_lower} ({', '.join(columns)}) VALUES ({', '.join(['%s'] * len(columns))}) ON CONFLICT DO NOTHING;"
         rows_inserted = 0
         for _, row in df.iterrows():
-            cursor.execute(insert_query, tuple(row[col] for col in columns))
+            values = []
+            for col in columns:
+                value = row[col]
+                if pd.isna(value):
+                    values.append(None)
+                elif col == 'ano':
+                    values.append(int(value))
+                elif col in ['area', 'volume']:
+                    values.append(float(value))
+                else:
+                    values.append(int(value) if value is not None else None)
+            cursor.execute(insert_query, tuple(values))
             rows_inserted += 1
         conn.commit()
         print(f"Dados inseridos com sucesso em {table_name_lower}! Linhas inseridas: {rows_inserted}")
@@ -98,7 +124,7 @@ def inserir_no_banco(df, table_name, columns, create_table_query):
         count = cursor.fetchone()[0]
         print(f"Total de linhas na tabela {table_name_lower} após inserção: {count}")
         cursor.execute(f"SELECT * FROM {table_name_lower} LIMIT 5;")
-        print("Primeiras 5 linhas da tabela producao:", cursor.fetchall())
+        print(f"Primeiras 5 linhas da tabela {table_name_lower}:", cursor.fetchall())
         
     except Error as e:
         print(f"Erro ao inserir no banco em {table_name_lower}: {e.__class__.__name__}: {str(e)}")
@@ -160,6 +186,7 @@ if __name__ == "__main__":
         """)
         cursor.execute("INSERT INTO Especie (idEspecie, nome) VALUES (1, 'Arábica');")
         cursor.execute("INSERT INTO Especie (idEspecie, nome) VALUES (2, 'Robusta');")
+        cursor.execute("INSERT INTO Especie (idEspecie, nome) VALUES (3, 'Conillon');")
         conn.commit()
         cursor.execute("SELECT * FROM Especie;")
         result = cursor.fetchall()
@@ -177,7 +204,9 @@ if __name__ == "__main__":
                 nome VARCHAR(50)
             );
         """)
-        cursor.execute("INSERT INTO Tipo (idTipo, nome) VALUES (1, 'Produção');")
+        cursor.execute("INSERT INTO Tipo (idTipo, nome) VALUES (1, 'Verde');")
+        cursor.execute("INSERT INTO Tipo (idTipo, nome) VALUES (2, 'Torrado');")
+        cursor.execute("INSERT INTO Tipo (idTipo, nome) VALUES (3, 'Solúvel');")
         conn.commit()
         cursor.execute("SELECT * FROM Tipo;")
         result = cursor.fetchall()
@@ -197,7 +226,31 @@ if __name__ == "__main__":
                 FOREIGN KEY (idEstado) REFERENCES Estado(idEstado)
             );
         """)
-        print("Tabela Regiao criada (vazia por enquanto)")
+        # Inserir regiões manualmente com base na saída fornecida
+        regioes = [
+            (1, 4, 'Cerrado'),
+            (2, 4, 'Planalto'),
+            (3, 4, 'Atlântico'),
+            (4, 7, 'Sul e Centro-Oeste'),
+            (5, 7, 'Triângulo, Alto Paranaíba e Noroeste'),
+            (6, 7, 'Zona da Mata, Rio Doce e Central'),
+            (7, 7, 'Norte, Jequitinhona e Mucuri')
+        ]
+        for id_regiao, id_estado, nome in regioes:
+            cursor.execute(
+                "INSERT INTO Regiao (idRegiao, idEstado, nome) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING;",
+                (id_regiao, id_estado, nome)
+            )
+        conn.commit()
+        cursor.execute("SELECT * FROM Regiao;")
+        result = cursor.fetchall()
+        if result:
+            print("Região(ões) confirmada(s):")
+            for row in result:
+                print(f"idRegiao: {row[0]}, idEstado: {row[1]}, nome: {row[2]}")
+        else:
+            print("Falha ao inserir em Regiao.")
+        print("Conteúdo da tabela Regiao:", result)
 
         conn.commit()
 

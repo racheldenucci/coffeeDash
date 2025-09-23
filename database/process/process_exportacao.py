@@ -19,7 +19,7 @@ def processar_exportacao():
     print("Primeiras 5 linhas de VOLUME (SACAS):\n", df_volume.head())
 
     # Mapear espécies e tipos
-    especie_map = {'Conillon': 3, 'Arábica': 1}  # Conillon = 3, Arábica = 1 (Robusta = 2 assumido)
+    especie_map = {'Conillon': 3, 'Robusta': 2, 'Arábica': 1} 
     tipo_map = {'Verde': 1, 'Torrado': 2, 'Solúvel': 3}
 
     # Processar dados anuais
