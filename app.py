@@ -18,7 +18,22 @@ def get_dataframe(query):
     return df
 
 st.set_page_config(page_title="Dashboard do Café")
-st.title("☕ Dashboard de Dados do Café")
+# st.title("☕ Dashboard de Dados do Café")
+
+# col1, col2, col3, col4 = st.columns(4)
+# anos = get_dataframe("SELECT DISTINCT ano FROM producao ORDER BY ano DESC")["ano"].tolist()  #RECONSIDERAR
+# estados = get_dataframe("SELECT descricao FROM estado ORDER BY descricao")["descricao"].tolist()
+# tipos = get_dataframe("SELECT nome FROM tipo ORDER BY nome")["nome"].tolist()
+# especies = get_dataframe("SELECT nome FROM especie ORDER BY nome")["nome"].tolist()
+
+# with col1:
+#     ano_selecionado = st.selectbox("Selecione o Ano", anos, index=0)
+# with col2:
+#     estado_selecionado = st.selectbox("Selecione o Estado", ["Todos"] + estados, index=0)
+# with col3:
+#     tipo_selecionado = st.selectbox("Selecione o Tipo", ["Todos"] + tipos, index=0)
+# with col4:    
+#     especie_selecionada = st.selectbox("Selecione a Espécie", ["Todas"] + especies, index=0)
 
 #Mapa de Produção por Estado
 # 🗺️ Mapa de Produção por Estado (paleta "café" + escala log automática)
@@ -102,57 +117,81 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
+# Volume Produzido por Estado e Ano
+st.header("📊 Volume Produzido por Estado e Ano")
 
-# # 1. Produção por Estado
-# st.header("📈 Produção por Estado")
-# df_prod = get_dataframe("""
-#     SELECT e.descricao AS estado, SUM(p.volume) AS volumetotal
-#     FROM producao p
-#     JOIN estado e ON p.idEstado = e.idEstado
-#     GROUP BY e.descricao
-#     ORDER BY volumetotal DESC
-# """)
-# st.bar_chart(df_prod.set_index("estado").sort_values("volumetotal"))
+conn = psycopg2.connect(DB_URL)
+query_volume_ano = """
+SELECT p.ano, e.descricao AS estado, SUM(p.volume) AS volume
+FROM producao p
+JOIN estado e ON p.idestado = e.idestado
+GROUP BY p.ano, e.descricao
+ORDER BY p.ano, e.descricao;
+"""
+df_volume_ano = pd.read_sql(query_volume_ano, conn)
+conn.close()
 
-# # 2. Exportação por Espécie
-# # st.header("💵 Receita de Exportação por Espécie")
-# # df_exp = get_dataframe("""
-# #     SELECT es.descricao AS especie, SUM(e.receita) AS receitatotal
-# #     FROM exportacao e
-# #     JOIN especie es ON e.idEspecie = es.idEspecie
-# #     GROUP BY es.descricao
-# #     ORDER BY receitatotal DESC
-# # """)
-# # st.bar_chart(df_exp.set_index("especie"))
+# Criar gráfico de barras empilhadas
+fig_volume = px.bar(
+    df_volume_ano,
+    x="ano",
+    y="volume",
+    color="estado",
+    title="Volume de Café Produzido por Estado ao Longo dos Anos",
+    labels={"ano": "Ano", "volume": "Volume (toneladas)", "estado": "Estado"},
+    barmode="stack",
+    color_discrete_sequence=px.colors.qualitative.Set3
+)
 
-# # 3. Destinos de Exportação
-# st.header("🌍 Exportações por País de Destino")
-# df_dest = get_dataframe("""
-#     SELECT pa.descricao AS pais, SUM(d.volume) AS volumetotal
-#     FROM destino d
-#     JOIN pais pa ON d.idPais = pa.idPais
-#     GROUP BY pa.descricao
-#     ORDER BY volumetotal DESC
-# """)
-# st.bar_chart(df_dest.set_index("pais"))
+fig_volume.update_layout(
+    xaxis=dict(tickmode='linear', dtick=1),
+    yaxis=dict(title="Volume (toneladas)"),
+    hovermode="x unified",
+    legend=dict(
+        title="Estado",
+        orientation="v",
+        yanchor="top",
+        y=1,
+        xanchor="left",
+        x=1.01
+    ),
+    margin=dict(l=50, r=150, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
 
-# # 4. Evolução do Preço Médio no Varejo
-# st.header("🛒 Preço Médio no Varejo (R$/kg)")
-# df_preco = get_dataframe("""
-#     SELECT ano, mes, valor
-#     FROM precovarejo
-#     ORDER BY ano, mes
-# """)
-# df_preco['data'] = pd.to_datetime(df_preco['ano'].astype(str) + '-' + df_preco['mes'].astype(str), format='%Y-%m')
-# df_preco.set_index("data", inplace=True)
-# st.line_chart(df_preco['valor'])
+st.plotly_chart(fig_volume, use_container_width=True)
 
-# # 5. Consumo Interno por Tipo
-# st.header("☕ Consumo Interno por Tipo de Café")
-# df_cons = get_dataframe("""
-#     SELECT t.descricao AS tipo, SUM(c.volume) AS consumototal
-#     FROM consumointerno c
-#     JOIN tipo t ON c.tipo = t.idTipo
-#     GROUP BY t.descricao
-# """)
-# st.bar_chart(df_cons.set_index("tipo"))
+# Opção alternativa: Gráfico de linhas
+st.subheader("📈 Evolução do Volume por Estado (Linhas)")
+
+fig_linhas = px.line(
+    df_volume_ano,
+    x="ano",
+    y="volume",
+    color="estado",
+    title="Evolução Temporal da Produção por Estado",
+    labels={"ano": "Ano", "volume": "Volume (toneladas)", "estado": "Estado"},
+    markers=True,
+    color_discrete_sequence=px.colors.qualitative.Set3
+)
+
+fig_linhas.update_layout(
+    xaxis=dict(tickmode='linear', dtick=1),
+    yaxis=dict(title="Volume (toneladas)"),
+    hovermode="x unified",
+    legend=dict(
+        title="Estado",
+        orientation="v",
+        yanchor="top",
+        y=1,
+        xanchor="left",
+        x=1.01
+    ),
+    margin=dict(l=50, r=150, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_linhas, use_container_width=True)
+
