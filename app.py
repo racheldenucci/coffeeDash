@@ -195,3 +195,194 @@ fig_linhas.update_layout(
 
 st.plotly_chart(fig_linhas, use_container_width=True)
 
+# Mapa Mundi de Exportação de Café do Brasil
+st.header("🌍 Exportação de Café do Brasil por País")
+
+conn = psycopg2.connect(DB_URL)
+query_exportacao = """
+SELECT p.descricao AS pais, COALESCE(SUM(d.volume), 0) AS volume
+FROM pais p
+LEFT JOIN destino d ON p.idpais = d.idpais
+GROUP BY p.descricao
+ORDER BY volume DESC;
+"""
+df_exportacao = pd.read_sql(query_exportacao, conn)
+conn.close()
+
+# Paleta personalizada "café" para o mapa mundi
+coffee_scale_world = [
+    [0.00, "#f8f1e3"],  # creme (baixo)
+    [0.30, "#d9a673"],  # caramelo
+    [0.60, "#8b4513"],  # café
+    [1.00, "#3e2723"],  # espresso (alto)
+]
+
+# Decide automaticamente se usa escala log
+vol_min_world = float(df_exportacao["volume"].replace(0, np.nan).min() or 0)
+vol_max_world = float(df_exportacao["volume"].max() or 0)
+use_log_world = vol_max_world > 0 and (vol_max_world / max(vol_min_world, 1)) >= 20
+
+df_exportacao["volume_plot"] = df_exportacao["volume"]
+colorbar_title_world = "volume"
+tickmode_world = None
+tickvals_world = None
+ticktext_world = None
+
+if use_log_world:
+    df_exportacao["volume_plot"] = np.log1p(df_exportacao["volume"]).astype(float)
+    colorbar_title_world = "volume (log)"
+    if vol_max_world > 1:
+        raw_ticks_world = np.geomspace(1, vol_max_world, 5)
+        tickvals_world = np.log1p(raw_ticks_world)
+        ticktext_world = [f"{int(t):,}".replace(",", ".") for t in raw_ticks_world]
+        tickmode_world = "array"
+
+fig_world = px.choropleth(
+    df_exportacao,
+    locations="pais",
+    locationmode="country names",
+    color="volume_plot",
+    color_continuous_scale=coffee_scale_world,
+    title="Exportação de Café do Brasil por País",
+)
+
+fig_world.update_geos(fitbounds="locations", visible=False)
+
+fig_world.update_traces(
+    hovertemplate="<b>%{location}</b><br>" +
+                  "Volume: %{customdata} t<extra></extra>",
+    customdata=[f"{int(v):,}".replace(",", ".") for v in df_exportacao["volume"]]
+)
+
+fig_world.update_layout(
+    coloraxis_colorbar=dict(
+        title=colorbar_title_world,
+        thickness=16,
+        tickmode=tickmode_world,
+        tickvals=tickvals_world,
+        ticktext=ticktext_world,
+    ),
+    margin=dict(l=0, r=0, t=60, b=0),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_world, use_container_width=True)
+
+# Evolução do Preço Médio no Varejo
+st.header("📊 Evolução do Preço Médio no Varejo")
+
+conn = psycopg2.connect(DB_URL)
+query_preco_varejo = """
+SELECT ano, mes, valor
+FROM precovarejo
+WHERE valor IS NOT NULL
+ORDER BY ano, mes;
+"""
+df_preco_varejo = pd.read_sql(query_preco_varejo, conn)
+conn.close()
+
+# Cria coluna de data para o eixo x
+df_preco_varejo["data"] = pd.to_datetime(df_preco_varejo["ano"].astype(str) + "-" + df_preco_varejo["mes"].astype(str).str.zfill(2) + "-01")
+
+fig_preco = px.line(
+    df_preco_varejo,
+    x="data",
+    y="valor",
+    title="Evolução do Preço Médio do Café no Varejo",
+    labels={"data": "Data", "valor": "Preço Médio (R$)"},
+    markers=False,
+    line_shape="linear",
+)
+
+fig_preco.update_layout(
+    xaxis_title="Data",
+    yaxis_title="Preço Médio (R$)",
+    hovermode="x unified",
+    margin=dict(l=50, r=50, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_preco, use_container_width=True)
+
+# Produção Total do País ao Longo dos Anos
+st.header("📊 Produção Total do País ao Longo dos Anos")
+
+conn = psycopg2.connect(DB_URL)
+query_total_ano = """
+SELECT ano, SUM(volume) AS volume_total
+FROM producao
+GROUP BY ano
+ORDER BY ano;
+"""
+df_total_ano = pd.read_sql(query_total_ano, conn)
+conn.close()
+
+fig_total_ano = px.line(
+    df_total_ano,
+    x="ano",
+    y="volume_total",
+    title="Produção Total de Café no Brasil por Ano",
+    labels={"ano": "Ano", "volume_total": "Volume Total (toneladas)"},
+    markers=True,
+    line_shape="linear",
+)
+
+fig_total_ano.update_layout(
+    xaxis=dict(tickmode='linear', dtick=1),
+    yaxis_title="Volume Total (toneladas)",
+    hovermode="x unified",
+    margin=dict(l=50, r=50, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_total_ano, use_container_width=True)
+
+# Correlação entre Preço de Varejo e Volume de Produção
+st.header("🔗 Correlação entre Preço de Varejo e Volume de Produção")
+
+# Consulta: produção total por ano
+conn = psycopg2.connect(DB_URL)
+query_prod_ano = """
+SELECT ano, SUM(volume) AS volume_total
+FROM producao
+GROUP BY ano
+ORDER BY ano;
+"""
+df_prod_ano = pd.read_sql(query_prod_ano, conn)
+
+# Consulta: preço médio por ano (agregando meses)
+query_preco_ano = """
+SELECT ano, AVG(valor) AS preco_medio
+FROM precovarejo
+GROUP BY ano
+ORDER BY ano;
+"""
+df_preco_ano = pd.read_sql(query_preco_ano, conn)
+conn.close()
+
+# Junta os dois DataFrames pelo ano
+df_corr = pd.merge(df_prod_ano, df_preco_ano, on="ano", how="inner")
+
+# Gráfico de dispersão
+fig_corr = px.scatter(
+    df_corr,
+    x="volume_total",
+    y="preco_medio",
+    trendline="ols",
+    title="Correlação entre Volume de Produção e Preço Médio no Varejo",
+    labels={"volume_total": "Volume Produzido (toneladas)", "preco_medio": "Preço Médio (R$)"},
+)
+
+fig_corr.update_layout(
+    xaxis_title="Volume Produzido (toneladas)",
+    yaxis_title="Preço Médio (R$)",
+    margin=dict(l=50, r=50, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_corr, use_container_width=True)
+
