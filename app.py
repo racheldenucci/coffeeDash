@@ -18,7 +18,7 @@ def get_dataframe(query):
     return df
 
 st.set_page_config(page_title="Dashboard do Café")
-# st.title("☕ Dashboard de Dados do Café")
+st.title("☕ Dashboard do Café")
 
 # col1, col2, col3, col4 = st.columns(4)
 # anos = get_dataframe("SELECT DISTINCT ano FROM producao ORDER BY ano DESC")["ano"].tolist()  #RECONSIDERAR
@@ -386,3 +386,122 @@ fig_corr.update_layout(
 
 st.plotly_chart(fig_corr, use_container_width=True)
 
+# Produção por Tipo e Espécie
+st.header("📊 Produção por Tipo e Espécie")
+
+conn = psycopg2.connect(DB_URL)
+query_prod_tipo_especie = """
+SELECT t.nome AS tipo,
+       e.nome AS especie,
+       COALESCE(SUM(p.volume), 0) AS volume
+FROM producao p
+JOIN tipo t ON p.idTipo = t.idTipo
+JOIN especie e ON p.idEspecie = e.idEspecie
+GROUP BY t.nome, e.nome
+ORDER BY t.nome, volume DESC;
+"""
+df_prod_tipo = pd.read_sql(query_prod_tipo_especie, conn)
+conn.close()
+
+# Gráfico de barras horizontais
+fig_prod_bar = px.bar(
+    df_prod_tipo,
+    x="volume",
+    y="especie",
+    color="tipo",
+    orientation="h",
+    title="Volume de Produção por Espécie e Tipo",
+    labels={"volume": "Volume (toneladas)", "especie": "Espécie", "tipo": "Tipo"},
+    color_discrete_sequence=px.colors.qualitative.Set3
+)
+
+fig_prod_bar.update_layout(
+    xaxis_title="Volume (toneladas)",
+    yaxis_title="Espécie",
+    margin=dict(l=150, r=50, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_prod_bar, use_container_width=True)
+
+# Comparativo Volume x Receita de Exportação (Dispersão)
+# st.header("🔁 Comparativo: Volume x Receita de Exportação por País")
+
+# conn = psycopg2.connect(DB_URL)
+# query_exp_comp = """
+# SELECT p.descricao AS pais,
+#        COALESCE(SUM(d.volume), 0) AS volume,
+#        COALESCE(SUM(e.receita), 0) AS receita
+# FROM pais p
+# LEFT JOIN destino d ON p.idpais = d.idpais
+# LEFT JOIN exportacao e ON e.ano = d.ano AND e.idEspecie = d.idEspecie
+# GROUP BY p.descricao
+# ORDER BY receita DESC;
+# """
+# df_exp_comp = pd.read_sql(query_exp_comp, conn)
+# conn.close()
+
+# # Garantir tipos numéricos
+# df_exp_comp["volume"] = pd.to_numeric(df_exp_comp["volume"], errors="coerce").fillna(0)
+# df_exp_comp["receita"] = pd.to_numeric(df_exp_comp["receita"], errors="coerce").fillna(0)
+
+# # Gráfico de dispersão
+# fig_exp_scatter = px.scatter(
+#     df_exp_comp,
+#     x="volume",
+#     y="receita",
+#     size="volume",
+#     size_max=60,
+#     hover_name="pais",
+#     color="receita",
+#     color_continuous_scale="Viridis",
+#     title="Comparativo Volume x Receita de Exportação (cada ponto = país)",
+#     labels={"volume": "Volume Exportado (toneladas)", "receita": "Receita (US$)"},
+# )
+
+# fig_exp_scatter.update_layout(
+#     xaxis_title="Volume Exportado (toneladas)",
+#     yaxis_title="Receita (US$)",
+#     margin=dict(l=50, r=50, t=60, b=50),
+#     paper_bgcolor="rgba(0,0,0,0)",
+#     plot_bgcolor="rgba(0,0,0,0)",
+#     coloraxis_colorbar=dict(title="Receita (US$)", thickness=16),
+# )
+
+# st.plotly_chart(fig_exp_scatter, use_container_width=True)
+
+# Evolução da Receita das Exportações
+st.header("📈 Evolução da Receita das Exportações")
+
+conn = psycopg2.connect(DB_URL)
+query_receita_exportacao = """
+SELECT ano, SUM(receita) AS receita_total
+FROM exportacao
+GROUP BY ano
+ORDER BY ano;
+"""
+df_receita_exportacao = pd.read_sql(query_receita_exportacao, conn)
+conn.close()
+
+# Gráfico de linha
+fig_receita = px.line(
+    df_receita_exportacao,
+    x="ano",
+    y="receita_total",
+    title="Evolução da Receita das Exportações de Café",
+    labels={"ano": "Ano", "receita_total": "Receita Total (US$)"},
+    markers=True,
+    line_shape="linear",
+)
+
+fig_receita.update_layout(
+    xaxis=dict(tickmode='linear', dtick=1),
+    yaxis_title="Receita Total (US$)",
+    hovermode="x unified",
+    margin=dict(l=50, r=50, t=60, b=50),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+)
+
+st.plotly_chart(fig_receita, use_container_width=True)
