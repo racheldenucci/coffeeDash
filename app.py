@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import plotly_express as px
 import os
 from dotenv import load_dotenv
+import pycountry
 
 
 load_dotenv()
@@ -209,6 +210,53 @@ ORDER BY volume DESC;
 df_exportacao = pd.read_sql(query_exportacao, conn)
 conn.close()
 
+# Mapeamento manual de países
+country_mapping = {
+    "E.U.A.": "United States of America",
+    "ALEMANHA": "Germany",
+    "ITALIA": "Italy",
+    "BELGICA": "Belgium",
+    "JAPAO": "Japan",
+    "PAISES BAIXOS (HOLANDA)": "Netherlands",
+    "TURQUIA": "Turkey",
+    "ESPANHA": "Spain",
+    "RUSSIAN FEDERATION": "Russia",
+    "COREIA DO SUL (REPUBL.)": "South Korea",
+    "FRANCA": "France",
+    "REINO UNIDO": "United Kingdom",
+    "SUECIA": "Sweden",
+    "ESLOVENIA": "Slovenia",
+    "GRECIA": "Greece",
+    "VIETNAM": "Vietnam",
+}
+
+# Função para traduzir nomes de países
+def translate_country_name(name):
+    # Primeiro tentar o mapeamento manual
+    if name in country_mapping:
+        return country_mapping[name]
+
+    # Se não encontrar no mapeamento, tentar pycountry
+    try:
+        country = pycountry.countries.get(name=name)
+        if country:
+            return country.name
+        # Tentar buscar por nome comum ou oficial
+        for country in pycountry.countries:
+            if name.lower() in country.name.lower() or (hasattr(country, 'common_name') and name.lower() in country.common_name.lower()):
+                return country.name
+        # Se não encontrar, tentar fuzzy matching
+        import difflib
+        matches = difflib.get_close_matches(name, [c.name for c in pycountry.countries], n=1, cutoff=0.6)
+        if matches:
+            return matches[0]
+        return name  # Retornar original se não encontrar
+    except:
+        return name
+
+# Aplicar tradução aos nomes dos países
+df_exportacao["pais_traduzido"] = df_exportacao["pais"].apply(translate_country_name)
+
 # Paleta personalizada "café" para o mapa mundi
 coffee_scale_world = [
     [0.00, "#f8f1e3"],  # creme (baixo)
@@ -239,7 +287,7 @@ if use_log_world:
 
 fig_world = px.choropleth(
     df_exportacao,
-    locations="pais",
+    locations="pais_traduzido",
     locationmode="country names",
     color="volume_plot",
     color_continuous_scale=coffee_scale_world,
