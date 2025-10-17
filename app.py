@@ -51,18 +51,18 @@ ORDER BY e.descricao;
 df = pd.read_sql(query, conn)
 conn.close()
 
-# Paleta personalizada "café"
+# cores personalizadas
 coffee_scale = [
-    [0.00, "#f8f1e3"],  # creme (baixo)
-    [0.30, "#d9a673"],  # caramelo
-    [0.60, "#8b4513"],  # café
-    [1.00, "#3e2723"],  # espresso (alto)
+    [0.00, "#f8f1e3"],  
+    [0.30, "#d9a673"],
+    [0.60, "#8b4513"],
+    [1.00, "#3e2723"],
 ]
 
-# Decide automaticamente se usa escala log
+# decide automatico se usa log ou nao
 vol_min = float(df["volume"].replace(0, np.nan).min() or 0)
 vol_max = float(df["volume"].max() or 0)
-use_log = vol_max > 0 and (vol_max / max(vol_min, 1)) >= 20  # bem desigual? use log
+use_log = vol_max > 0 and (vol_max / max(vol_min, 1)) >= 20
 
 df["volume_plot"] = df["volume"]
 colorbar_title = "volume"
@@ -75,12 +75,11 @@ if use_log:
     df["volume_plot"] = np.log1p(df["volume"]).astype(float)
     colorbar_title = "volume (log)"
 
-    # colorbar com ticks “bonitos” mostrando os valores originais
-    # 5 marcas geométricas entre 1 e vol_max (ajuste se quiser)
+    
     if vol_max > 1:
-        raw_ticks = np.geomspace(1, vol_max, 5)  # 1, …, max
+        raw_ticks = np.geomspace(1, vol_max, 5) 
         tickvals = np.log1p(raw_ticks)
-        ticktext = [f"{int(t):,}".replace(",", ".") for t in raw_ticks]  # 1.000 etc.
+        ticktext = [f"{int(t):,}".replace(",", ".") for t in raw_ticks]
         tickmode = "array"
 
 fig = px.choropleth(
@@ -95,14 +94,13 @@ fig = px.choropleth(
 
 fig.update_geos(fitbounds="locations", visible=False)
 
-# Hover legível
+#hover legível
 fig.update_traces(
     hovertemplate="<b>%{location}</b><br>" +
                   "Volume: %{customdata} t<extra></extra>",
     customdata=[f"{int(v):,}".replace(",", ".") for v in df["volume"]]
 )
 
-# Colorbar e layout (bom no dark theme)
 fig.update_layout(
     coloraxis_colorbar=dict(
         title=colorbar_title,
@@ -132,7 +130,6 @@ ORDER BY p.ano, e.descricao;
 df_volume_ano = pd.read_sql(query_volume_ano, conn)
 conn.close()
 
-# Criar gráfico de barras empilhadas
 fig_volume = px.bar(
     df_volume_ano,
     x="ano",
@@ -163,38 +160,6 @@ fig_volume.update_layout(
 
 st.plotly_chart(fig_volume, use_container_width=True)
 
-# Opção alternativa: Gráfico de linhas
-st.subheader("📈 Evolução do Volume por Estado (Linhas)")
-
-fig_linhas = px.line(
-    df_volume_ano,
-    x="ano",
-    y="volume",
-    color="estado",
-    title="Evolução Temporal da Produção por Estado",
-    labels={"ano": "Ano", "volume": "Volume (toneladas)", "estado": "Estado"},
-    markers=True,
-    color_discrete_sequence=px.colors.qualitative.Set3
-)
-
-fig_linhas.update_layout(
-    xaxis=dict(tickmode='linear', dtick=1),
-    yaxis=dict(title="Volume (toneladas)"),
-    hovermode="x unified",
-    legend=dict(
-        title="Estado",
-        orientation="v",
-        yanchor="top",
-        y=1,
-        xanchor="left",
-        x=1.01
-    ),
-    margin=dict(l=50, r=150, t=60, b=50),
-    paper_bgcolor="rgba(0,0,0,0)",
-    plot_bgcolor="rgba(0,0,0,0)",
-)
-
-st.plotly_chart(fig_linhas, use_container_width=True)
 
 # Mapa Mundi de Exportação de Café do Brasil
 st.header("🌍 Exportação de Café do Brasil por País")
@@ -210,7 +175,7 @@ ORDER BY volume DESC;
 df_exportacao = pd.read_sql(query_exportacao, conn)
 conn.close()
 
-# Mapeamento manual de países
+# mapeamento manual de países p/ plotly
 country_mapping = {
     "E.U.A.": "United States of America",
     "ALEMANHA": "Germany",
@@ -230,42 +195,40 @@ country_mapping = {
     "VIETNAM": "Vietnam",
 }
 
-# Função para traduzir nomes de países
+
 def translate_country_name(name):
-    # Primeiro tentar o mapeamento manual
+    # tenta mapeamento manual
     if name in country_mapping:
         return country_mapping[name]
 
-    # Se não encontrar no mapeamento, tentar pycountry
+    # se não encontrar tentar pycountry
     try:
         country = pycountry.countries.get(name=name)
         if country:
             return country.name
-        # Tentar buscar por nome comum ou oficial
+        
         for country in pycountry.countries:
             if name.lower() in country.name.lower() or (hasattr(country, 'common_name') and name.lower() in country.common_name.lower()):
                 return country.name
-        # Se não encontrar, tentar fuzzy matching
+        # tenta correspondência aproximada
         import difflib
         matches = difflib.get_close_matches(name, [c.name for c in pycountry.countries], n=1, cutoff=0.6)
         if matches:
             return matches[0]
-        return name  # Retornar original se não encontrar
+        return name
     except:
         return name
 
-# Aplicar tradução aos nomes dos países
 df_exportacao["pais_traduzido"] = df_exportacao["pais"].apply(translate_country_name)
 
-# Paleta personalizada "café" para o mapa mundi
 coffee_scale_world = [
-    [0.00, "#f8f1e3"],  # creme (baixo)
-    [0.30, "#d9a673"],  # caramelo
-    [0.60, "#8b4513"],  # café
-    [1.00, "#3e2723"],  # espresso (alto)
+    [0.00, "#f8f1e3"],  
+    [0.30, "#d9a673"],
+    [0.60, "#8b4513"],
+    [1.00, "#3e2723"],
 ]
 
-# Decide automaticamente se usa escala log
+
 vol_min_world = float(df_exportacao["volume"].replace(0, np.nan).min() or 0)
 vol_max_world = float(df_exportacao["volume"].max() or 0)
 use_log_world = vol_max_world > 0 and (vol_max_world / max(vol_min_world, 1)) >= 20
@@ -330,7 +293,7 @@ ORDER BY ano, mes;
 df_preco_varejo = pd.read_sql(query_preco_varejo, conn)
 conn.close()
 
-# Cria coluna de data para o eixo x
+# coluna de data x
 df_preco_varejo["data"] = pd.to_datetime(df_preco_varejo["ano"].astype(str) + "-" + df_preco_varejo["mes"].astype(str).str.zfill(2) + "-01")
 
 fig_preco = px.line(
@@ -391,7 +354,6 @@ st.plotly_chart(fig_total_ano, use_container_width=True)
 # Correlação entre Preço de Varejo e Volume de Produção
 st.header("🔗 Correlação entre Preço de Varejo e Volume de Produção")
 
-# Consulta: produção total por ano
 conn = psycopg2.connect(DB_URL)
 query_prod_ano = """
 SELECT ano, SUM(volume) AS volume_total
@@ -401,7 +363,6 @@ ORDER BY ano;
 """
 df_prod_ano = pd.read_sql(query_prod_ano, conn)
 
-# Consulta: preço médio por ano (agregando meses)
 query_preco_ano = """
 SELECT ano, AVG(valor) AS preco_medio
 FROM precovarejo
@@ -411,10 +372,8 @@ ORDER BY ano;
 df_preco_ano = pd.read_sql(query_preco_ano, conn)
 conn.close()
 
-# Junta os dois DataFrames pelo ano
 df_corr = pd.merge(df_prod_ano, df_preco_ano, on="ano", how="inner")
 
-# Gráfico de dispersão
 fig_corr = px.scatter(
     df_corr,
     x="volume_total",
@@ -451,7 +410,6 @@ ORDER BY t.nome, volume DESC;
 df_prod_tipo = pd.read_sql(query_prod_tipo_especie, conn)
 conn.close()
 
-# Gráfico de barras horizontais
 fig_prod_bar = px.bar(
     df_prod_tipo,
     x="volume",
@@ -532,7 +490,6 @@ ORDER BY ano;
 df_receita_exportacao = pd.read_sql(query_receita_exportacao, conn)
 conn.close()
 
-# Gráfico de linha
 fig_receita = px.line(
     df_receita_exportacao,
     x="ano",
