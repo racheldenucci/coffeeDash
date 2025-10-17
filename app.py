@@ -430,6 +430,8 @@ with col1: #evolução preço médio varejo
     st.plotly_chart(fig_preco, use_container_width=True)
 
 
+
+
 with col2: # correlação preço varejo x volume produção
 
     st.header("")
@@ -520,3 +522,36 @@ with col2: # correlação preço varejo x volume produção
 # )
 
 # st.plotly_chart(fig_exp_scatter, use_container_width=True)
+
+with col1: # evolução consumo interno
+
+    conn = psycopg2.connect(DB_URL)
+    query_consumo_interno = """
+    SELECT ano, volume
+    FROM consumoInterno
+    WHERE ANO > 1985
+    ORDER BY ano;
+    """
+    df_consumo_interno = pd.read_sql(query_consumo_interno, conn)
+    conn.close()
+
+    fig_consumo = px.line(
+        df_consumo_interno,
+        x="ano",
+        y="volume",
+        title="Evolução do Consumo Interno de Café",
+        labels={"ano": "Ano", "volume": "Consumo Per Capita (kg/habitante/ano)"},
+        markers=True,
+        line_shape="linear",
+    )
+
+    fig_consumo.update_layout(
+        xaxis=dict(tickmode='linear', dtick=1),
+        yaxis_title="Consumo Per Capita (kg/habitante/ano)",
+        hovermode="x unified",
+        margin=dict(l=50, r=50, t=60, b=50),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    st.plotly_chart(fig_consumo, use_container_width=True)
