@@ -28,45 +28,42 @@ coffee_discrete_sequence = [
     "#cd853f",
 ]
 
-def get_dataframe(query):
+@st.cache_data
+def get_dataframe(query, params=None):
     conn = psycopg2.connect(DB_URL)
-    df = pd.read_sql(query, conn)
+    df = pd.read_sql(query, conn, params=params)
     conn.close()
     return df
 
 st.set_page_config(page_title="Dashboard do Café", layout="wide")
 st.title("☕ Dashboard do Café")
 
-# col1, col2, col3, col4 = st.columns(4)
-# anos = get_dataframe("SELECT DISTINCT ano FROM producao ORDER BY ano DESC")["ano"].tolist()  #RECONSIDERAR
-# estados = get_dataframe("SELECT descricao FROM estado ORDER BY descricao")["descricao"].tolist()
-# tipos = get_dataframe("SELECT nome FROM tipo ORDER BY nome")["nome"].tolist()
-# especies = get_dataframe("SELECT nome FROM especie ORDER BY nome")["nome"].tolist()
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.header("Produção")
+        # Obter anos disponíveis
+    anos_df = get_dataframe("SELECT DISTINCT ano FROM producao ORDER BY ano DESC")
+    anos = anos_df["ano"].tolist()
 
-# with col1:
-#     ano_selecionado = st.selectbox("Selecione o Ano", anos, index=0)
-# with col2:
-#     estado_selecionado = st.selectbox("Selecione o Estado", ["Todos"] + estados, index=0)
-# with col3:
-#     tipo_selecionado = st.selectbox("Selecione o Tipo", ["Todos"] + tipos, index=0)
-# with col4:    
-#     especie_selecionada = st.selectbox("Selecione a Espécie", ["Todas"] + especies, index=0)
+    # Filtro de ano
+    anos_selecionados = st.multiselect("Selecione o(s) Ano(s)", anos, default=anos, key="ano_producao")
+
+    if not anos_selecionados:
+        st.warning("Selecione pelo menos um ano.")
+        anos_selecionados = anos
 
 col1, col2 = st.columns(2)
 #-------------- PRODUÇÃO ----------------------
 with col1: # mapa produção por estado
-    st.header("Produção")
 
-    conn = psycopg2.connect(DB_URL)
     query = """
     SELECT e.descricao AS estado, COALESCE(SUM(p.volume), 0) AS volume
     FROM estado e
-    LEFT JOIN producao p ON e.idestado = p.idestado
+    LEFT JOIN producao p ON e.idestado = p.idestado AND p.ano = ANY(%s)
     GROUP BY e.descricao
     ORDER BY e.descricao;
     """
-    df = pd.read_sql(query, conn)
-    conn.close()
+    df = get_dataframe(query, params=(anos_selecionados,))
 
     # cores personalizadas
     coffee_scale = [
@@ -106,7 +103,7 @@ with col1: # mapa produção por estado
         featureidkey="properties.sigla",  # casa com a chave do geojson
         color="volume_plot",
         color_continuous_scale=coffee_scale,
-        title="Produção de Café por Estado",
+        title=f"Volume Produzido",
     )
 
     fig.update_geos(fitbounds="locations", visible=False)
@@ -134,24 +131,22 @@ with col1: # mapa produção por estado
     st.plotly_chart(fig, use_container_width=True)
 
 with col2: # produção total por ano
-    st.header("")
-
-    conn = psycopg2.connect(DB_URL)
+    
+   
     query_total_ano = """
     SELECT ano, SUM(volume) AS volume_total
     FROM producao
     GROUP BY ano
     ORDER BY ano;
     """
-    df_total_ano = pd.read_sql(query_total_ano, conn)
-    conn.close()
+    df_total_ano = get_dataframe(query_total_ano)
 
     fig_total_ano = px.line(
         df_total_ano,
         x="ano",
         y="volume_total",
         title="Produção Total por Ano",
-        labels={"ano": "Ano", "volume_total": "Volume Total (toneladas)"},
+        labels={"ano": "Ano", "volume_total": "Volume Total Produzido (toneladas)"},
         markers=True,
         line_shape="linear",
     )
@@ -159,7 +154,7 @@ with col2: # produção total por ano
     fig_total_ano.update_traces(line_color="#654321")
 
     fig_total_ano.update_layout(
-        xaxis=dict(tickmode='linear', dtick=1),
+        xaxis=dict(tickmode='auto', dtick=1),
         yaxis_title="Volume Total (toneladas)",
         hovermode="x unified",
         margin=dict(l=50, r=50, t=60, b=50),
@@ -171,7 +166,6 @@ with col2: # produção total por ano
 
 with col1: # volume produzido por estado e ano
     
-    conn = psycopg2.connect(DB_URL)
     query_volume_ano = """
     SELECT p.ano, e.descricao AS estado, SUM(p.volume) AS volume
     FROM producao p
@@ -179,22 +173,21 @@ with col1: # volume produzido por estado e ano
     GROUP BY p.ano, e.descricao
     ORDER BY p.ano, e.descricao;
     """
-    df_volume_ano = pd.read_sql(query_volume_ano, conn)
-    conn.close()
+    df_volume_ano = get_dataframe(query_volume_ano)
 
     fig_volume = px.bar(
         df_volume_ano,
         x="ano",
         y="volume",
         color="estado",
-        title="Volume Produzido por Estado por Ano",
+        title="Volume Produzido por Ano",
         labels={"ano": "Ano", "volume": "Volume (toneladas)", "estado": "Estado"},
         barmode="stack",
         color_discrete_sequence=coffee_discrete_sequence
     )
 
     fig_volume.update_layout(
-        xaxis=dict(tickmode='linear', dtick=1),
+        xaxis=dict(tickmode='auto', dtick=1),
         yaxis=dict(title="Volume (toneladas)"),
         hovermode="x unified",
         legend=dict(
@@ -214,7 +207,6 @@ with col1: # volume produzido por estado e ano
     
 with col2: # produção por Espécie
     
-    conn = psycopg2.connect(DB_URL)
     query_prod_tipo_especie = """
     SELECT t.nome AS tipo,
         e.nome AS especie,
@@ -225,8 +217,7 @@ with col2: # produção por Espécie
     GROUP BY t.nome, e.nome
     ORDER BY t.nome, volume DESC;
     """
-    df_prod_tipo = pd.read_sql(query_prod_tipo_especie, conn)
-    conn.close()
+    df_prod_tipo = get_dataframe(query_prod_tipo_especie)
 
     fig_prod_bar = px.bar(
         df_prod_tipo,
@@ -234,7 +225,7 @@ with col2: # produção por Espécie
         y="especie",
         color="tipo",
         orientation="h",
-        title="Volume de Produção por Espécie",
+        title="Volume Total Produzido por Espécie",
         labels={"volume": "Volume (toneladas)", "especie": "Espécie", "tipo": "Tipo"},
         color_discrete_sequence=coffee_discrete_sequence
     )
@@ -254,7 +245,6 @@ with col1: # mapa de exportação
     st.header("")
     st.header("🌍 Exportação")
 
-    conn = psycopg2.connect(DB_URL)
     query_exportacao = """
     SELECT p.descricao AS pais, COALESCE(SUM(d.volume), 0) AS volume
     FROM pais p
@@ -262,8 +252,7 @@ with col1: # mapa de exportação
     GROUP BY p.descricao
     ORDER BY volume DESC;
     """
-    df_exportacao = pd.read_sql(query_exportacao, conn)
-    conn.close()
+    df_exportacao = get_dataframe(query_exportacao)
 
     # mapeamento manual de países p/ plotly
     country_mapping = {
@@ -375,15 +364,13 @@ with col2: # evolução receita exportações
     st.header("")
     st.header("")
 
-    conn = psycopg2.connect(DB_URL)
     query_receita_exportacao = """
     SELECT ano, SUM(receita) AS receita_total
     FROM exportacao
     GROUP BY ano
     ORDER BY ano;
     """
-    df_receita_exportacao = pd.read_sql(query_receita_exportacao, conn)
-    conn.close()
+    df_receita_exportacao = get_dataframe(query_receita_exportacao)
 
     fig_receita = px.line(
         df_receita_exportacao,
@@ -398,7 +385,7 @@ with col2: # evolução receita exportações
     fig_receita.update_traces(line_color="#654321")
 
     fig_receita.update_layout(
-        xaxis=dict(tickmode='linear', dtick=1),
+        xaxis=dict(tickmode='auto', dtick=1),
         yaxis_title="Receita Total (US$)",
         hovermode="x unified",
         margin=dict(l=50, r=50, t=60, b=50),
@@ -414,15 +401,13 @@ with col1: #evolução preço médio varejo
     st.header("Consumo Interno")
     # Evolução do Preço Médio no Varejo
 
-    conn = psycopg2.connect(DB_URL)
     query_preco_varejo = """
     SELECT ano, mes, valor
     FROM precovarejo
     WHERE valor IS NOT NULL
     ORDER BY ano, mes;
     """
-    df_preco_varejo = pd.read_sql(query_preco_varejo, conn)
-    conn.close()
+    df_preco_varejo = get_dataframe(query_preco_varejo)
 
     # coluna de data x
     df_preco_varejo["data"] = pd.to_datetime(df_preco_varejo["ano"].astype(str) + "-" + df_preco_varejo["mes"].astype(str).str.zfill(2) + "-01")
@@ -456,14 +441,13 @@ with col2: # correlação preço varejo x volume produção
     st.header("")
     st.header("")
 
-    conn = psycopg2.connect(DB_URL)
     query_prod_ano = """
     SELECT ano, SUM(volume) AS volume_total
     FROM producao
     GROUP BY ano
     ORDER BY ano;
     """
-    df_prod_ano = pd.read_sql(query_prod_ano, conn)
+    df_prod_ano = get_dataframe(query_prod_ano)
 
     query_preco_ano = """
     SELECT ano, AVG(valor) AS preco_medio
@@ -471,8 +455,7 @@ with col2: # correlação preço varejo x volume produção
     GROUP BY ano
     ORDER BY ano;
     """
-    df_preco_ano = pd.read_sql(query_preco_ano, conn)
-    conn.close()
+    df_preco_ano = get_dataframe(query_preco_ano)
 
     df_corr = pd.merge(df_prod_ano, df_preco_ano, on="ano", how="inner")
 
