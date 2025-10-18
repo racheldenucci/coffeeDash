@@ -35,7 +35,7 @@ def get_dataframe(query, params=None):
     conn.close()
     return df
 
-st.set_page_config(page_title="Dashboard do Café", layout="wide")
+st.set_page_config(page_title="Dashboard do Café", layout="wide", page_icon="chart_with_upwards_trend")
 st.title("☕ Dashboard do Café")
 
 c1, c2, c3, c4 = st.columns(4)
@@ -87,7 +87,7 @@ with col1: # mapa produção por estado
     if use_log:
         # log(1+x) para evitar -inf em zeros
         df["volume_plot"] = np.log1p(df["volume"]).astype(float)
-        colorbar_title = "volume (log)"
+        colorbar_title = "volume"
 
         
         if vol_max > 1:
@@ -240,19 +240,33 @@ with col2: # produção por Espécie
 
     st.plotly_chart(fig_prod_bar, use_container_width=True)
 
-with col1: # mapa de exportação
-
-    st.header("")
+#-------------- EXPORTAÇÃO ----------------------
+co1, co2, co3, co4 = st.columns(4)
+with co1:
     st.header("🌍 Exportação")
+     # Obter anos disponíveis para exportação
+    anos_export_df = get_dataframe("SELECT DISTINCT ano FROM destino ORDER BY ano DESC")
+    anos_export = anos_export_df["ano"].tolist()
+
+    # Filtro de ano para exportação
+    anos_export_selecionados = st.multiselect("Selecione o(s) Ano(s)", anos_export, default=anos_export, key="ano_exportacao")
+
+    if not anos_export_selecionados:
+        st.warning("Selecione pelo menos um ano.")
+        anos_export_selecionados = anos_export
+
+        
+col1, col2 = st.columns(2)
+with col1: # mapa de exportação    
 
     query_exportacao = """
     SELECT p.descricao AS pais, COALESCE(SUM(d.volume), 0) AS volume
     FROM pais p
-    LEFT JOIN destino d ON p.idpais = d.idpais
+    LEFT JOIN destino d ON p.idpais = d.idpais AND d.ano = ANY(%s)
     GROUP BY p.descricao
     ORDER BY volume DESC;
     """
-    df_exportacao = get_dataframe(query_exportacao)
+    df_exportacao = get_dataframe(query_exportacao, params=(anos_export_selecionados,))
 
     # mapeamento manual de países p/ plotly
     country_mapping = {
@@ -320,7 +334,7 @@ with col1: # mapa de exportação
 
     if use_log_world:
         df_exportacao["volume_plot"] = np.log1p(df_exportacao["volume"]).astype(float)
-        colorbar_title_world = "volume (log)"
+        colorbar_title_world = "volume"
         if vol_max_world > 1:
             raw_ticks_world = np.geomspace(1, vol_max_world, 5)
             tickvals_world = np.log1p(raw_ticks_world)
@@ -333,7 +347,7 @@ with col1: # mapa de exportação
         locationmode="country names",
         color="volume_plot",
         color_continuous_scale=coffee_scale_world,
-        title="Exportação de Café do Brasil por País",
+        title="Exportação de Café do Brasil por Destino",
     )
 
     fig_world.update_geos(fitbounds="locations", visible=False)
@@ -360,9 +374,6 @@ with col1: # mapa de exportação
     st.plotly_chart(fig_world, use_container_width=True)
 
 with col2: # evolução receita exportações
-    
-    st.header("")
-    st.header("")
 
     query_receita_exportacao = """
     SELECT ano, SUM(receita) AS receita_total
@@ -376,7 +387,7 @@ with col2: # evolução receita exportações
         df_receita_exportacao,
         x="ano",
         y="receita_total",
-        title="Evolução da Receita das Exportações de Café",
+        title="Receita Total das Exportações de Café",
         labels={"ano": "Ano", "receita_total": "Receita Total (US$)"},
         markers=True,
         line_shape="linear",
@@ -396,6 +407,7 @@ with col2: # evolução receita exportações
     st.plotly_chart(fig_receita, use_container_width=True)
 
 
+#-------------- CONSUMO INTERNO ----------------------
 with col1: #evolução preço médio varejo
     st.header("")
     st.header("Consumo Interno")
@@ -416,7 +428,7 @@ with col1: #evolução preço médio varejo
         df_preco_varejo,
         x="data",
         y="valor",
-        title="Evolução do Preço Médio do Café no Varejo",
+        title="Preço Médio do Café no Varejo",
         labels={"data": "Data", "valor": "Preço Médio (R$)"},
         markers=False,
         line_shape="linear",
@@ -434,7 +446,6 @@ with col1: #evolução preço médio varejo
     )
 
     st.plotly_chart(fig_preco, use_container_width=True)
-
 
 with col2: # correlação preço varejo x volume produção
 
@@ -464,7 +475,7 @@ with col2: # correlação preço varejo x volume produção
         x="volume_total",
         y="preco_medio",
         trendline="ols",
-        title="Correlação entre Volume de Produção e Preço Médio no Varejo",
+        title="Correlação Volume Produzido x Preço Médio no Varejo",
         labels={"volume_total": "Volume Produzido (toneladas)", "preco_medio": "Preço Médio (R$)"},
     )
 
@@ -480,49 +491,71 @@ with col2: # correlação preço varejo x volume produção
 
     st.plotly_chart(fig_corr, use_container_width=True)
 
+with col1: # evolução consumo interno
 
-# Comparativo Volume x Receita de Exportação (Dispersão)
-# st.header("🔁 Comparativo: Volume x Receita de Exportação por País")
+    query_consumo_interno = """
+    SELECT ano, volume
+    FROM consumoInterno
+    WHERE ANO > 1985
+    ORDER BY ano;
+    """
+    df_consumo_interno = get_dataframe(query_consumo_interno)
 
-# conn = psycopg2.connect(DB_URL)
-# query_exp_comp = """
-# SELECT p.descricao AS pais,
-#        COALESCE(SUM(d.volume), 0) AS volume,
-#        COALESCE(SUM(e.receita), 0) AS receita
-# FROM pais p
-# LEFT JOIN destino d ON p.idpais = d.idpais
-# LEFT JOIN exportacao e ON e.ano = d.ano AND e.idEspecie = d.idEspecie
-# GROUP BY p.descricao
-# ORDER BY receita DESC;
-# """
-# df_exp_comp = pd.read_sql(query_exp_comp, conn)
-# conn.close()
+    fig_consumo = px.line(
+        df_consumo_interno,
+        x="ano",
+        y="volume",
+        title="Consumo Interno de Café",
+        labels={"ano": "Ano", "volume": "Consumo Per Capita (kg/habitante/ano)"},
+        markers=True,
+        line_shape="linear",
+    )
 
-# # Garantir tipos numéricos
-# df_exp_comp["volume"] = pd.to_numeric(df_exp_comp["volume"], errors="coerce").fillna(0)
-# df_exp_comp["receita"] = pd.to_numeric(df_exp_comp["receita"], errors="coerce").fillna(0)
+    fig_consumo.update_traces(line_color="#654321")
 
-# # Gráfico de dispersão
-# fig_exp_scatter = px.scatter(
-#     df_exp_comp,
-#     x="volume",
-#     y="receita",
-#     size="volume",
-#     size_max=60,
-#     hover_name="pais",
-#     color="receita",
-#     color_continuous_scale="Viridis",
-#     title="Comparativo Volume x Receita de Exportação (cada ponto = país)",
-#     labels={"volume": "Volume Exportado (toneladas)", "receita": "Receita (US$)"},
-# )
+    fig_consumo.update_layout(
+        xaxis=dict(tickmode='auto', dtick=1),
+        yaxis_title="Consumo Per Capita (kg/habitante/ano)",
+        hovermode="x unified",
+        margin=dict(l=50, r=50, t=60, b=50),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
 
-# fig_exp_scatter.update_layout(
-#     xaxis_title="Volume Exportado (toneladas)",
-#     yaxis_title="Receita (US$)",
-#     margin=dict(l=50, r=50, t=60, b=50),
-#     paper_bgcolor="rgba(0,0,0,0)",
-#     plot_bgcolor="rgba(0,0,0,0)",
-#     coloraxis_colorbar=dict(title="Receita (US$)", thickness=16),
-# )
+    st.plotly_chart(fig_consumo, use_container_width=True)
 
-# st.plotly_chart(fig_exp_scatter, use_container_width=True)
+with col2: # preço médio x consumo interno
+
+    query_preco_consumo = """
+    SELECT ci.ano, ci.volume AS consumo_per_capita, pv.valor AS preco_medio
+    FROM consumoInterno ci
+    JOIN (
+        SELECT ano, AVG(valor) AS valor
+        FROM precovarejo
+        GROUP BY ano
+    ) pv ON ci.ano = pv.ano
+    WHERE ci.ano > 1985
+    ORDER BY ci.ano;
+    """
+    df_preco_consumo = get_dataframe(query_preco_consumo)
+
+    fig_preco_consumo = px.scatter(
+        df_preco_consumo,
+        x="consumo_per_capita",
+        y="preco_medio",
+        trendline="ols",
+        title="Correlação Preço Médio x Consumo Interno",
+        labels={"consumo_per_capita": "Consumo Per Capita (kg/habitante/ano)", "preco_medio": "Preço Médio (R$)"},
+    )
+
+    fig_preco_consumo.update_traces(marker_color="#654321")
+
+    fig_preco_consumo.update_layout(
+        xaxis_title="Consumo Per Capita (kg/habitante/ano)",
+        yaxis_title="Preço Médio (R$)",
+        margin=dict(l=50, r=50, t=60, b=50),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    st.plotly_chart(fig_preco_consumo, use_container_width=True)
