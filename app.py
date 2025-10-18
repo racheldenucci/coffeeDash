@@ -140,6 +140,8 @@ with col2: # produção total por ano
         line_shape="linear",
     )
 
+    fig_total_ano.update_traces(line_color="#A2663B")
+
     fig_total_ano.update_layout(
         xaxis=dict(tickmode='linear', dtick=1),
         yaxis_title="Volume Total (toneladas)",
