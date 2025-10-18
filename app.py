@@ -12,6 +12,22 @@ import pycountry
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
 
+# discrete sequence personalizado
+coffee_discrete_sequence = [
+    "#3e2723",
+    "#654321",
+    "#2f1b14",
+    "#f8f1e3",
+    "#e6d7c3",
+    "#d9a673",
+    "#b8860b",
+    "#a0522d",
+    "#8b4513",
+    "#1a0f0a",
+    "#daa520",
+    "#cd853f",
+]
+
 def get_dataframe(query):
     conn = psycopg2.connect(DB_URL)
     df = pd.read_sql(query, conn)
@@ -140,7 +156,7 @@ with col2: # produção total por ano
         line_shape="linear",
     )
 
-    fig_total_ano.update_traces(line_color="#A2663B")
+    fig_total_ano.update_traces(line_color="#654321")
 
     fig_total_ano.update_layout(
         xaxis=dict(tickmode='linear', dtick=1),
@@ -174,7 +190,7 @@ with col1: # volume produzido por estado e ano
         title="Volume Produzido por Estado por Ano",
         labels={"ano": "Ano", "volume": "Volume (toneladas)", "estado": "Estado"},
         barmode="stack",
-        color_discrete_sequence=px.colors.qualitative.Set3
+        color_discrete_sequence=coffee_discrete_sequence
     )
 
     fig_volume.update_layout(
@@ -220,7 +236,7 @@ with col2: # produção por Espécie
         orientation="h",
         title="Volume de Produção por Espécie",
         labels={"volume": "Volume (toneladas)", "especie": "Espécie", "tipo": "Tipo"},
-        color_discrete_sequence=px.colors.qualitative.Set3
+        color_discrete_sequence=coffee_discrete_sequence
     )
 
     fig_prod_bar.update_layout(
@@ -232,7 +248,6 @@ with col2: # produção por Espécie
     )
 
     st.plotly_chart(fig_prod_bar, use_container_width=True)
-
 
 with col1: # mapa de exportação
 
@@ -380,6 +395,8 @@ with col2: # evolução receita exportações
         line_shape="linear",
     )
 
+    fig_receita.update_traces(line_color="#654321")
+
     fig_receita.update_layout(
         xaxis=dict(tickmode='linear', dtick=1),
         yaxis_title="Receita Total (US$)",
@@ -419,6 +436,8 @@ with col1: #evolução preço médio varejo
         markers=False,
         line_shape="linear",
     )
+
+    fig_preco.update_traces(line_color="#654321")
 
     fig_preco.update_layout(
         xaxis_title="Data",
@@ -465,6 +484,8 @@ with col2: # correlação preço varejo x volume produção
         title="Correlação entre Volume de Produção e Preço Médio no Varejo",
         labels={"volume_total": "Volume Produzido (toneladas)", "preco_medio": "Preço Médio (R$)"},
     )
+
+    fig_corr.update_traces(marker_color="#654321")
 
     fig_corr.update_layout(
         xaxis_title="Volume Produzido (toneladas)",
